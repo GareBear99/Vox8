@@ -1,0 +1,108 @@
+diff --git a/IPlug/IPlugLogger.h b/IPlug/IPlugLogger.h
+index 42f04a505..0bff00df2 100644
+--- a/IPlug/IPlugLogger.h
++++ b/IPlug/IPlugLogger.h
+@@ -144,7 +144,7 @@ BEGIN_IPLUG_NAMESPACE
+     int i = (int) strlen(cStr);
+     cStr[i++] = tz >= 0 ? '+' : '-';
+     if (tz < 0) tz = -tz;
+-    snprintf(&cStr[i], 32, "%02d%02d", tz / 60, tz % 60);
++    snprintf(&cStr[i], 32 - i, "%02d%02d", tz / 60, tz % 60);
+     
+     static char sTimeStr[32];
+     strcpy(sTimeStr, cStr);
+diff --git a/IPlug/IPlugTimer.cpp b/IPlug/IPlugTimer.cpp
+index eab7523d7..d40fcd617 100644
+--- a/IPlug/IPlugTimer.cpp
++++ b/IPlug/IPlugTimer.cpp
+@@ -15,6 +15,10 @@
+ 
+ #include "IPlugTimer.h"
+ 
++#if defined OS_LINUX
++#include <chrono>
++#endif
++
+ using namespace iplug;
+ 
+ #if defined OS_MAC || defined OS_IOS
+@@ -143,4 +147,42 @@ void Timer_impl::TimerProc(void* userData)
+   Timer_impl* itimer = (Timer_impl*) userData;
+   itimer->mTimerFunc(*itimer);
+ }
++#elif defined OS_LINUX
++Timer* Timer::Create(ITimerFunction func, uint32_t intervalMs)
++{
++  return new Timer_impl(func, intervalMs);
++}
++
++Timer_impl::Timer_impl(ITimerFunction func, uint32_t intervalMs)
++: mTimerFunc(func)
++, mIntervalMs(intervalMs)
++, mRunning(true)
++{
++  mThread = std::thread([this]() {
++    while (mRunning.load(std::memory_order_acquire))
++    {
++      std::this_thread::sleep_for(std::chrono::milliseconds(mIntervalMs));
++      if (mRunning.load(std::memory_order_acquire))
++        mTimerFunc(*this);
++    }
++  });
++}
++
++Timer_impl::~Timer_impl()
++{
++  Stop();
++}
++
++void Timer_impl::Stop()
++{
++  mRunning.store(false, std::memory_order_release);
++  if (mThread.joinable())
++  {
++    // Stop() from the timer thread itself must not join itself.
++    if (std::this_thread::get_id() == mThread.get_id())
++      mThread.detach();
++    else
++      mThread.join();
++  }
++}
+ #endif
+diff --git a/IPlug/IPlugTimer.h b/IPlug/IPlugTimer.h
+index 1f76348df..b74923e7e 100644
+--- a/IPlug/IPlugTimer.h
++++ b/IPlug/IPlugTimer.h
+@@ -20,6 +20,8 @@
+ #include <cstring>
+ #include <stdint.h>
+ #include <cstring>
++#include <atomic>
++#include <thread>
+ #include <cmath>
+ #include <functional>
+ #include "ptrlist.h"
+@@ -95,6 +97,23 @@ private:
+   long ID = 0;
+   ITimerFunction mTimerFunc;
+ };
++#elif defined OS_LINUX
++// Minimal Linux timer (VM-only patch; upstream has no OS_LINUX branch
++// at d82b2e99). std::thread sleeps intervalMs between callbacks.
++class Timer_impl : public Timer
++{
++public:
++  Timer_impl(ITimerFunction func, uint32_t intervalMs);
++  ~Timer_impl();
++
++  void Stop() override;
++
++private:
++  ITimerFunction mTimerFunc;
++  uint32_t mIntervalMs;
++  std::atomic<bool> mRunning{false};
++  std::thread mThread;
++};
+ #else
+   #error NOT IMPLEMENTED
+ #endif
