@@ -266,7 +266,21 @@ STOI caveat.
 - Reduced-band runs (32/16): DONE 2026-11-05 — see section above.
   0.5817 @ 32, 0.5809 @ 16; saturation confirmed on both tracks.
 - Shell re-verification after the engine fix (pluginval / VST3
-  validator): in progress 2026-11-05 (shell rebuild + re-run on the VM).
+  validator): DONE 2026-11-05 — shell rebuilt from the fixed engine
+  on the VM (iPlug2 pin d82b2e99, patches still applied). **pluginval
+  v1.0.4 strictness 10: SUCCESS** — 25 test sections, 0 failures
+  (scan, open cold/warm, plugin info, state, automation, parameter
+  thread safety, buses, fuzz parameters; pluginval's own vst3-validator
+  subsection skipped as "validator path hasn't been set", as before —
+  the standalone validator covers it). **Steinberg VST3 validator: 47
+  tests passed, 0 failed.** **Shell test: 37 checks, 0 failures**,
+  shell output still bit-identical to the standalone engine (max diff
+  0.0; Morph endpoints differ by 0.361778). Standalone filterbank
+  suite re-run: **107,746 checks, 0 failures.** Phase 2 verdict
+  re-confirmed; the stereo fix changed no API, parameter or shell
+  behaviour. (Note for the ARCHITECTURE.md Phase 2 section: this
+  re-verification is recorded here, not swept into that file's
+  pending unrelated diff.)
 - Ghost STOI stays out until the Ghost resynthesis redesign lands
   (owed decision; the broken resynthesis would make the number
   meaningless). Note: the Ghost engine holds no biquads, so the
