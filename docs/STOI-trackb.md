@@ -171,24 +171,102 @@ evaluation order); this correction replaces both.
 
 ## Reduced band counts (32/16 — the saturation question)
 
-Not run yet on Track B, and not a blocker. The engine does not
-support it straightforwardly: `kNumBands` is a compile-time
-constant baked into the band layout, gains and filter arrays, so a
-32/16-band run needs a rebuild with a different constant (a scratch
-experiment, not a shipped change). Track A is running its own
-32-band variant concurrently. Follow-up: build the renderer with
-`kNumBands` set to 32 and 16 in a scratch copy, render the same
-corpus, score the same way, and compare against 0.5818 @ 128.
+Measured 2026-11-05, same corpus, same settings, same alignment and
+scorer as the 128-band run. Method: scratch copies of `Source/DSP`
+in `/tmp/vox8-nbands/32` and `/tmp/vox8-nbands/16` with only
+`kNumBands` changed in `Vox8Core.h` (128 → 32 / 16) — the band edges,
+gains and filter arrays all derive from that one constant, so the
+scratch engines are the same code at a different band count. The
+committed 128-band engine was not touched. Renders at
+`~/workspace/vox8-bench/corpus/renders-trackb-32/` and
+`renders-trackb-16/` (not committed). Envelope lags +20 to +30 ms,
+median +20 ms, same as 128 bands; frames kept = frames total on all
+40 files.
+
+| Bands | Track B | Track A | diff | bdl (B / A) | slt (B / A) |
+|---|---|---|---|---|---|
+| 128 | **0.5818** | 0.5817 | +0.0001 | 0.6136 / 0.6136 | 0.5499 / 0.5499 |
+| 32 | **0.5817** | 0.5816 | +0.0001 | 0.6133 / 0.6132 | 0.5501 / 0.5499 |
+| 16 | **0.5809** | 0.5807 | +0.0002 | 0.6123 / 0.6122 | 0.5494 / 0.5492 |
+
+The two tracks agree to 0.0002 at every band count, per file as well
+as overall (largest per-file gap: 0.0002, e.g. 32-band slt a0106
+0.5582 vs 0.5580). Intelligibility saturates by ~16 bands on both
+tracks: Track B spread 128→16 is 0.0009, Track A's is 0.0010. The
+paper's "saturates at ~20–30 bands" holds; 128 bands is a
+Ghost/Morph resolution choice, not an intelligibility choice.
+
+Per-file STOI, 32 bands (Track B; Track A in brackets where it differs):
+
+| Sentence | bdl | slt |
+|---|---|---|
+| arctic_a0104 | 0.6228 (A: 0.6227) | 0.5507 (A: 0.5506) |
+| arctic_a0106 | 0.5701 (A: 0.5700) | 0.5582 (A: 0.5580) |
+| arctic_a0108 | 0.6069 (A: 0.6068) | 0.5449 (A: 0.5447) |
+| arctic_a0111 | 0.6580 (A: 0.6579) | 0.5080 (A: 0.5079) |
+| arctic_a0115 | 0.5870 (A: 0.5869) | 0.5604 (A: 0.5600) |
+| arctic_a0125 | 0.5773 (A: 0.5772) | 0.5252 |
+| arctic_a0126 | 0.6453 (A: 0.6452) | 0.5924 (A: 0.5923) |
+| arctic_b0011 | 0.5971 | 0.5947 (A: 0.5946) |
+| arctic_b0016 | 0.6037 (A: 0.6035) | 0.5482 |
+| arctic_b0019 | 0.6651 (A: 0.6649) | 0.5180 (A: 0.5178) |
+
+Per-file STOI, 16 bands (Track B; Track A in brackets where it differs):
+
+| Sentence | bdl | slt |
+|---|---|---|
+| arctic_a0104 | 0.6214 (A: 0.6213) | 0.5500 (A: 0.5499) |
+| arctic_a0106 | 0.5682 (A: 0.5680) | 0.5576 (A: 0.5572) |
+| arctic_a0108 | 0.6061 | 0.5442 (A: 0.5439) |
+| arctic_a0111 | 0.6573 (A: 0.6572) | 0.5065 (A: 0.5064) |
+| arctic_a0115 | 0.5860 (A: 0.5859) | 0.5596 (A: 0.5591) |
+| arctic_a0125 | 0.5757 (A: 0.5755) | 0.5244 (A: 0.5245) |
+| arctic_a0126 | 0.6444 | 0.5916 |
+| arctic_b0011 | 0.5965 (A: 0.5966) | 0.5952 (A: 0.5949) |
+| arctic_b0016 | 0.6033 (A: 0.6031) | 0.5484 (A: 0.5481) |
+| arctic_b0019 | 0.6645 (A: 0.6644) | 0.5169 (A: 0.5165) |
+
+Mean per-band scores, overall (Track B 32 / Track A 32 / Track B 16 /
+Track A 16):
+
+| Band | Centre | B32 | A32 | B16 | A16 |
+|---|---|---|---|---|---|
+| 1 | 150 Hz | 0.3434 | 0.3431 | 0.3434 | 0.3433 |
+| 2 | 189 Hz | 0.5843 | 0.5843 | 0.5847 | 0.5846 |
+| 3 | 238 Hz | 0.6484 | 0.6484 | 0.6458 | 0.6459 |
+| 4 | 300 Hz | 0.5844 | 0.5845 | 0.5825 | 0.5827 |
+| 5 | 378 Hz | 0.4666 | 0.4662 | 0.4683 | 0.4678 |
+| 6 | 476 Hz | 0.6924 | 0.6924 | 0.6920 | 0.6920 |
+| 7 | 600 Hz | 0.7176 | 0.7176 | 0.7177 | 0.7176 |
+| 8 | 756 Hz | 0.7037 | 0.7034 | 0.7029 | 0.7024 |
+| 9 | 952 Hz | 0.7229 | 0.7227 | 0.7220 | 0.7215 |
+| 10 | 1200 Hz | 0.6848 | 0.6846 | 0.6836 | 0.6832 |
+| 11 | 1512 Hz | 0.5790 | 0.5788 | 0.5792 | 0.5789 |
+| 12 | 1905 Hz | 0.5078 | 0.5077 | 0.5080 | 0.5079 |
+| 13 | 2400 Hz | 0.4306 | 0.4306 | 0.4296 | 0.4297 |
+| 14 | 3024 Hz | 0.4950 | 0.4950 | 0.4920 | 0.4919 |
+| 15 | 3810 Hz | 0.5645 | 0.5644 | 0.5617 | 0.5614 |
+
+One real behavioural difference, not a scoring difference: output
+level scales with band count in this engine, and in the opposite
+direction from Track A. `bandGain` is ~0.038–0.078 per band with no
+per-count normalisation, so the vocoded sum grows with the number of
+bands: mean render peak 0.126 at 128 bands, 0.040 at 32, 0.028 at 16.
+Track A's renders go the other way (mean peak 0.160 at 32, 0.218 at
+16 — wider bands pass more energy per band). STOI is level-invariant
+enough that the scores still agree to 0.0002, and the 16-band peaks
+(0.022–0.039, about −33 to −28 dBFS) sit far above 16-bit quantisation
+noise, so the numbers stand. But a shipped 16/32-band tier on this
+engine would need gain compensation (or a `1/kNumBands`-style
+normalisation) — the level difference is a calibration note, not a
+STOI caveat.
 
 ## What is next
 
-- Reduced-band runs (32/16) as a scratch experiment, same corpus
-  and scoring.
+- Reduced-band runs (32/16): DONE 2026-11-05 — see section above.
+  0.5817 @ 32, 0.5809 @ 16; saturation confirmed on both tracks.
 - Shell re-verification after the engine fix (pluginval / VST3
-  validator): not re-run on the VM yet. The change is private to
-  the engine (no API, parameter or shell change) and both DSP-only
-  consumers rebuild clean, but the Phase 2 shell verdict should
-  be re-confirmed before the next release cut.
+  validator): in progress 2026-11-05 (shell rebuild + re-run on the VM).
 - Ghost STOI stays out until the Ghost resynthesis redesign lands
   (owed decision; the broken resynthesis would make the number
   meaningless). Note: the Ghost engine holds no biquads, so the
