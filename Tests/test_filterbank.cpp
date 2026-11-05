@@ -506,6 +506,67 @@ static void testBlockSizesAndRates()
     }
 }
 
+// --- 11. Stereo channel independence ---------------------------------------
+// Regression: each band's filters must hold per-channel state. Sharing one
+// Biquad across channels interleaves both channels' samples through one
+// state and corrupts the response (found by the STOI cross-check against
+// the reference, 2026-11-05: stereo envelopes ran 2x-27x hot
+// off-frequency while mono matched the reference exactly).
+static void testStereoChannelIndependence()
+{
+    const size_t n = (size_t)(kSr * 0.5);
+    std::vector<float> left(n, 0.0f), right(n, 0.0f);
+    fillSine(left, 1000.0, 0.5);
+    fillSine(right, 200.0, 0.5);
+    vox8::Parameters p;
+    p.mode = vox8::Mode::Vocoder;
+    p.air = 0.0f;
+    p.transientProtect = 0.0f;
+
+    // Stereo run with different content per channel.
+    vox8::FilterbankEngine eSt; initEngine(eSt, p);
+    std::vector<float> stL = left, stR = right;
+    for (size_t off = 0; off < n; off += 512)
+    {
+        const int m = (int)std::min<size_t>(512, n - off);
+        float* blk[2] = {stL.data() + off, stR.data() + off};
+        eSt.process(blk, 2, m, nullptr, 0);
+    }
+
+    // Mono run of the same left content: the stereo left output must
+    // match it sample for sample (channel 0's carrier has no offset).
+    vox8::FilterbankEngine eMo;
+    eMo.prepare(kSr, 1);
+    eMo.setParameters(p);
+    eMo.setMidiNote(69);
+    std::vector<float> mo = left;
+    for (size_t off = 0; off < n; off += 512)
+    {
+        const int m = (int)std::min<size_t>(512, n - off);
+        float* blk[1] = {mo.data() + off};
+        eMo.process(blk, 1, m, nullptr, 0);
+    }
+    CHECK(mo.size() == stL.size());
+    double maxDiff = 0.0;
+    for (size_t i = 0; i < n; ++i)
+        maxDiff = std::max(maxDiff, std::abs((double)mo[i] - (double)stL[i]));
+    CHECK(maxDiff < 1e-6);
+
+    // Same left content, silent right: the left output must be unchanged.
+    vox8::FilterbankEngine eSt2; initEngine(eSt2, p);
+    std::vector<float> st2L = left, st2R(n, 0.0f);
+    for (size_t off = 0; off < n; off += 512)
+    {
+        const int m = (int)std::min<size_t>(512, n - off);
+        float* blk[2] = {st2L.data() + off, st2R.data() + off};
+        eSt2.process(blk, 2, m, nullptr, 0);
+    }
+    maxDiff = 0.0;
+    for (size_t i = 0; i < n; ++i)
+        maxDiff = std::max(maxDiff, std::abs((double)stL[i] - (double)st2L[i]));
+    CHECK(maxDiff < 1e-6);
+}
+
 int main()
 {
     testBandLayout();
@@ -518,6 +579,7 @@ int main()
     testMask();
     testDeterminism();
     testBlockSizesAndRates();
+    testStereoChannelIndependence();
 
     std::printf("%d checks, %d failures: %s\n", g_checks, g_failures,
                 g_failures == 0 ? "ALL TESTS PASSED" : "TESTS FAILED");

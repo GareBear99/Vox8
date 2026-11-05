@@ -7,11 +7,16 @@
 //
 // Design, per the Vox8 paper (vox8-paper.md section 4.2):
 // - 128 log-spaced bands, 55 Hz-18.5 kHz, geometric edges.
-// - Per band: modulator HP+LP and carrier HP+LP (RBJ biquads, Q=0.707),
-//   built once in prepare(), never rebuilt in process(). 512 filter
-//   instances per channel, evaluated every sample — that is the CPU story
-//   of this engine; measure it (Tests/bench_filterbank.cpp) rather than
-//   claiming anything about it.
+// - Per band, per channel: modulator HP+LP and carrier HP+LP (RBJ biquads,
+//   Q=0.707), built once in prepare(), never rebuilt in process(). 768
+//   filter instances per channel (6 per band), evaluated every sample —
+//   that is the CPU story of this engine; measure it
+//   (Tests/bench_filterbank.cpp) rather than claiming anything about it.
+//   The filters are per channel, not shared: sharing one filter instance
+//   across channels interleaves the two channels' samples through one
+//   state, which corrupts the response (found by the STOI cross-check
+//   against the reference, 2026-11-05: stereo envelopes ran 2x-27x hot
+//   off-frequency, mono matched the reference exactly).
 // - Per-band envelope followers, asymmetric attack/release from clarity:
 //   attack 0.75-9.75 ms, release 22-242 ms.
 // - Freeze: when freeze > 0.5 the engine stops writing frozenEnv and reads
@@ -75,12 +80,15 @@ public:
     {
         for (auto& b : bands)
         {
-            b.modLowpass.reset();
-            b.modHighpass.reset();
-            b.modLowpassB.reset();
-            b.modHighpassB.reset();
-            b.carLowpass.reset();
-            b.carHighpass.reset();
+            for (int ch = 0; ch < kMaxChannels; ++ch)
+            {
+                b.modLowpass[static_cast<size_t>(ch)].reset();
+                b.modHighpass[static_cast<size_t>(ch)].reset();
+                b.modLowpassB[static_cast<size_t>(ch)].reset();
+                b.modHighpassB[static_cast<size_t>(ch)].reset();
+                b.carLowpass[static_cast<size_t>(ch)].reset();
+                b.carHighpass[static_cast<size_t>(ch)].reset();
+            }
             b.envA.fill(0.0f);
             b.envB.fill(0.0f);
             b.frozenA.fill(0.0f);
@@ -189,8 +197,10 @@ public:
                     }
 
                     auto& b = bands[static_cast<size_t>(bi)];
-                    const float bandCarrier = b.carHighpass.process(
-                        b.carLowpass.process(carrier));
+                    const float bandCarrier =
+                        b.carHighpass[static_cast<size_t>(ch)].process(
+                            b.carLowpass[static_cast<size_t>(ch)].process(
+                                carrier));
 
                     // Vocoder path.
                     const float consonantLift =
@@ -274,9 +284,12 @@ public:
 private:
     struct Band
     {
-        Biquad modLowpass, modHighpass;     // modulator path, envelope 1
-        Biquad modLowpassB, modHighpassB;   // modulator path, envelope 2
-        Biquad carLowpass, carHighpass;     // carrier path
+        // One filter instance per channel: sharing a Biquad across
+        // channels interleaves both channels' samples through one state
+        // and corrupts the response (see the header note).
+        std::array<Biquad, kMaxChannels> modLowpass, modHighpass;   // modulator path, envelope 1
+        std::array<Biquad, kMaxChannels> modLowpassB, modHighpassB; // modulator path, envelope 2
+        std::array<Biquad, kMaxChannels> carLowpass, carHighpass;   // carrier path
         std::array<float, kMaxChannels> envA{};
         std::array<float, kMaxChannels> envB{};
         std::array<float, kMaxChannels> frozenA{};
@@ -300,12 +313,16 @@ private:
             const float lo = bandEdgeLo(i, sr);
             const float hi = bandEdgeHi(i, sr);
             auto& b = bands[static_cast<size_t>(i)];
-            b.modHighpass.setHighpass(lo, static_cast<float>(sr));
-            b.carHighpass.setHighpass(lo, static_cast<float>(sr));
-            b.modHighpassB.setHighpass(lo, static_cast<float>(sr));
-            b.modLowpass.setLowpass(hi, static_cast<float>(sr));
-            b.carLowpass.setLowpass(hi, static_cast<float>(sr));
-            b.modLowpassB.setLowpass(hi, static_cast<float>(sr));
+            for (int ch = 0; ch < kMaxChannels; ++ch)
+            {
+                const size_t c = static_cast<size_t>(ch);
+                b.modHighpass[c].setHighpass(lo, static_cast<float>(sr));
+                b.carHighpass[c].setHighpass(lo, static_cast<float>(sr));
+                b.modHighpassB[c].setHighpass(lo, static_cast<float>(sr));
+                b.modLowpass[c].setLowpass(hi, static_cast<float>(sr));
+                b.carLowpass[c].setLowpass(hi, static_cast<float>(sr));
+                b.modLowpassB[c].setLowpass(hi, static_cast<float>(sr));
+            }
         }
     }
 
@@ -322,11 +339,11 @@ private:
             float& frozen = second ? b.frozenB[static_cast<size_t>(ch)]
                                    : b.frozenA[static_cast<size_t>(ch)];
             if (second)
-                bandMod = b.modHighpassB.process(
-                    b.modLowpassB.process(modulator));
+                bandMod = b.modHighpassB[static_cast<size_t>(ch)].process(
+                    b.modLowpassB[static_cast<size_t>(ch)].process(modulator));
             else
-                bandMod = b.modHighpass.process(
-                    b.modLowpass.process(modulator));
+                bandMod = b.modHighpass[static_cast<size_t>(ch)].process(
+                    b.modLowpass[static_cast<size_t>(ch)].process(modulator));
 
             const float mag = std::sqrt(bandMod * bandMod + 1.0e-12f);
             env = (mag > env) ? attackCoeff * env + (1.0f - attackCoeff) * mag

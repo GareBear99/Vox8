@@ -1,64 +1,63 @@
 # Vox8 Track B — STOI on the fixed corpus (filterbank engine, 128 bands)
 
-Measured 2026-11-05. Renderer: `Tests/RenderCorpus.cpp` (headless,
-framework-free, compiles against `Source/DSP` only). Scorer:
-`Tests/score_stoi.py` (envelope-lag alignment + ARC-AudioBench STOI).
-Renders (WAVs + per-file JSON) live outside the repo at
+Measured 2026-11-05, corrected the same day after the measurement found
+and fixed a stereo bug in the engine (see "The stereo bug" below).
+Renderer: `Tests/RenderCorpus.cpp` (headless, framework-free, compiles
+against `Source/DSP` only). Scorer: `Tests/score_stoi.py`
+(envelope-lag alignment + ARC-AudioBench STOI). Renders (WAVs +
+per-file JSON) live outside the repo at
 `~/workspace/vox8-bench/corpus/renders-trackb/` — they are not committed.
 
-## Result
+## Result (corrected)
 
 | | Track B (iPlug2) | Track A (JUCE) | diff |
 |---|---|---|---|
-| Overall (n=20) | **0.5678** | 0.5817 | −0.0139 |
-| bdl, male (n=10) | **0.6075** (0.568–0.656) | 0.6136 (0.574–0.664) | −0.0061 |
-| slt, female (n=10) | **0.5281** (0.484–0.577) | 0.5499 (0.507–0.597) | −0.0218 |
+| Overall (n=20) | **0.5818** | 0.5817 | +0.0001 |
+| bdl, male (n=10) | **0.6136** (0.574–0.664) | 0.6136 (0.574–0.664) | 0.0000 |
+| slt, female (n=10) | **0.5499** (0.484–0.597) | 0.5499 (0.507–0.597) | 0.0000 |
 
-The two tracks agree closely: the male speaker is within 0.006 and
-every male file is within 0.014. The female speaker is systematically
-lower by 0.017–0.030 on all 10 files — a real, small divergence, not
-noise (see "Why Track B is lower on slt" below). The paper's
-conclusion is the same on either number: a 128-band filterbank
-vocoder at a fixed C4 carrier scores STOI ~0.57–0.58 on this corpus.
+The two tracks agree to the fourth decimal: 17 of 20 files score
+identically, and the other three differ by 0.0001 (16-bit render
+quantisation). The paper's number for a 128-band filterbank vocoder
+at a fixed C4 carrier on this corpus is STOI **0.58**, measured
+independently by two implementations.
 
-Per-file STOI (Track B):
+Per-file STOI (Track B; Track A identical except where noted):
 
 | Sentence | bdl | slt |
 |---|---|---|
-| arctic_a0104 | 0.6082 | 0.5317 |
-| arctic_a0106 | 0.5727 | 0.5420 |
-| arctic_a0108 | 0.6028 | 0.5165 |
-| arctic_a0111 | 0.6557 | 0.4840 |
-| arctic_a0115 | 0.5847 | 0.5455 |
-| arctic_a0125 | 0.5682 | 0.5001 |
-| arctic_a0126 | 0.6395 | 0.5770 |
-| arctic_b0011 | 0.5857 | 0.5638 |
-| arctic_b0016 | 0.6069 | 0.5229 |
-| arctic_b0019 | 0.6504 | 0.4970 |
+| arctic_a0104 | 0.6222 | 0.5511 |
+| arctic_a0106 | 0.5739 | 0.5597 |
+| arctic_a0108 | 0.6074 | 0.5465 |
+| arctic_a0111 | 0.6585 | 0.5065 |
+| arctic_a0115 | 0.5868 | 0.5625 |
+| arctic_a0125 | 0.5753 | 0.5240 |
+| arctic_a0126 | 0.6471 | 0.5973 |
+| arctic_b0011 | 0.5973 (A: 0.5972) | 0.5903 (A: 0.5902) |
+| arctic_b0016 | 0.6039 | 0.5472 (A: 0.5471) |
+| arctic_b0019 | 0.6637 | 0.5140 |
 
-Mean per-band scores, overall (Track B vs Track A):
+Mean per-band scores, overall (Track B; Track A identical to 4
+decimals on every band except band 2, where Track B reads 0.5932
+against Track A's 0.5933):
 
-| Band | Centre | Track B | Track A | diff |
-|---|---|---|---|---|
-| 1 | 150 Hz | 0.3371 | 0.3384 | −0.0013 |
-| 2 | 189 Hz | 0.5053 | 0.5933 | −0.0880 |
-| 3 | 238 Hz | 0.6620 | 0.6605 | +0.0016 |
-| 4 | 300 Hz | 0.5962 | 0.5943 | +0.0019 |
-| 5 | 378 Hz | 0.3948 | 0.4622 | −0.0675 |
-| 6 | 476 Hz | 0.6901 | 0.6921 | −0.0020 |
-| 7 | 600 Hz | 0.7048 | 0.7076 | −0.0028 |
-| 8 | 756 Hz | 0.6961 | 0.6987 | −0.0026 |
-| 9 | 952 Hz | 0.7162 | 0.7209 | −0.0048 |
-| 10 | 1200 Hz | 0.6794 | 0.6840 | −0.0047 |
-| 11 | 1512 Hz | 0.5744 | 0.5788 | −0.0044 |
-| 12 | 1905 Hz | 0.5037 | 0.5071 | −0.0034 |
-| 13 | 2400 Hz | 0.4252 | 0.4298 | −0.0045 |
-| 14 | 3024 Hz | 0.4824 | 0.4949 | −0.0125 |
-| 15 | 3810 Hz | 0.5487 | 0.5637 | −0.0150 |
-
-13 of 15 bands agree within 0.015. The whole gap lives in bands 2
-(189 Hz, −0.088) and 5 (378 Hz, −0.068) — the bands where a female
-voice's fundamental (~190–220 Hz) and its neighbourhood sit.
+| Band | Centre | Track B | Track A |
+|---|---|---|---|
+| 1 | 150 Hz | 0.3384 | 0.3384 |
+| 2 | 189 Hz | 0.5932 | 0.5933 |
+| 3 | 238 Hz | 0.6605 | 0.6605 |
+| 4 | 300 Hz | 0.5943 | 0.5943 |
+| 5 | 378 Hz | 0.4622 | 0.4622 |
+| 6 | 476 Hz | 0.6921 | 0.6921 |
+| 7 | 600 Hz | 0.7076 | 0.7076 |
+| 8 | 756 Hz | 0.6987 | 0.6987 |
+| 9 | 952 Hz | 0.7209 | 0.7209 |
+| 10 | 1200 Hz | 0.6840 | 0.6840 |
+| 11 | 1512 Hz | 0.5788 | 0.5788 |
+| 12 | 1905 Hz | 0.5071 | 0.5071 |
+| 13 | 2400 Hz | 0.4298 | 0.4298 |
+| 14 | 3024 Hz | 0.4949 | 0.4949 |
+| 15 | 3810 Hz | 0.5637 | 0.5637 |
 
 ## Render settings (identical to Track A, for comparability)
 
@@ -94,7 +93,7 @@ was shifted by its measured envelope lag
 - Identity sanity: clean vs clean scores STOI 1.0, all 15 bands 1.0
   (Bench `stoi`, same files the renders use).
 - Renderer builds clean (`g++ -std=c++17 -O2 -Wall -Wextra`,
-  no warnings after the build-command comment fix).
+  no warnings).
 - All 20 files rendered (peaks 0.096–0.174, no clipping, no silence).
 - Bench: ARC-AudioBench HEAD `a4fdd5a` (includes the STOI commit
   `95fa999`), pulled fresh before the run. All 20 files scored,
@@ -102,66 +101,95 @@ was shifted by its measured envelope lag
 - Track A's renders were not touched: `renders/stoi_summary.json`
   still reads 0.5817, and Track B's renders + summary live in the
   separate `renders-trackb/` directory.
+- Filterbank suite after the fix: 107,746 checks, 0 failures
+  (includes the new stereo-independence regression test).
+- Cross-check that closes the loop: the fixed Track B renders match
+  Track A's renders to 1 LSB of 16-bit audio (RMS diff
+  0.000012–0.000018, max diff 0.000061, correlation 1.000000 on
+  all four files spot-checked).
 
-## Why Track B is lower on slt (investigation so far)
+## The stereo bug (found by this measurement, fixed the same day)
 
-The DSP formulas are the same on both tracks — same band layout
-(55 Hz–18.5 kHz log, 128 bands), same RBJ transfer functions
-(Q=0.707), same envelope followers (attack 4.8 ms / release 121 ms
-at clarity 0.55), same envGain/drive, same carrier blend
-(0.44 saw / 0.26 sine / 0.18 pulse + sub). What the measurements
-show:
+The first Track B measurement scored **0.5678** overall
+(bdl 0.6075, slt 0.5281) — close to Track A, but the female speaker
+was systematically 0.017–0.030 lower on all 10 files, concentrated
+in STOI bands 2 (189 Hz, −0.088) and 5 (378 Hz, −0.068). That
+pattern was investigated instead of reported as a final number:
 
-- The clean references are BIT-IDENTICAL between tracks
-  (same linear resampler), so the inputs match exactly.
-- The vocoded outputs correlate 0.998+ (RMS diff ~0.0015–0.0019
-  against RMS ~0.027–0.034, best sample lag 0). The engines are
-  close, not identical.
-- The output difference is concentrated below 250 Hz: in the
-  50–150 Hz band the difference energy is ~3x the signal energy
-  there, and 150–250 Hz ~0.9–1.1x — while above 250 Hz the
-  difference is only 3–6% of the signal per band. (The sub-250 Hz
-  signal energy itself is tiny, ~0.02% of the total, so this is a
-  small absolute difference that lands exactly on STOI bands 2
-  and 5 for the female speaker, whose F0 sits there.)
-- Ruled out: biquad coefficient precision. Rebuilding the
-  renderer with double-precision coefficient computation changed
-  the output not at all (RMS diff vs Track A identical to 6
-  decimals).
-- Ruled out as a design difference: JUCE's
-  `IIR::Coefficients::makeLowPass/makeHighPass` (tan-based
-  bilinear design) is algebraically identical to the RBJ cookbook
-  used here — verified term by term against JUCE 8.0.5 source —
-  and JUCE's `IIR::Filter` is the same Direct Form II transposed
-  structure as `Biquad::process`. The remaining difference is
-  therefore float evaluation order / state rounding somewhere in
-  the low-band filters, not a different transfer function.
-- Not yet localised to the modulator path vs the carrier path:
-  a probe build of Track A's renderer from read-only copies
-  (JUCE 8.0.5, built outside both repos) is in progress to A/B
-  the engines on synthetic probes (200 Hz sine, white noise) and
-  pin the divergence down. This doc will be updated when it
-  lands. No engine change follows from this STOI gap alone: the
-  gap is 0.014 overall, the formulas agree, and chasing it by
-  retuning the shipped engine would be fitting to Track A's
-  float rounding rather than to the paper.
+- The clean references are BIT-IDENTICAL between tracks (same
+  linear resampler), so the inputs match exactly.
+- The pre-fix vocoded outputs correlated 0.998+, but the difference
+  was concentrated below 250 Hz (difference energy 3x the signal
+  there, 3–6% above 250 Hz).
+- Ruled out: biquad coefficient precision (double-precision
+  coefficients changed the output not at all) and the filter design
+  (JUCE's tan-based `IIR::Coefficients` are algebraically identical
+  to the RBJ cookbook used here — verified term by term against
+  JUCE 8.0.5 source — and a Python model of both bandpass pairs
+  agrees to 0.1% at every probe frequency).
+- Localised with synthetic probes (200 Hz sine, 1000 Hz sine, white
+  noise) rendered through Track A's renderer (built from read-only
+  copies in workspace scratch, JUCE 8.0.5) and this engine: the
+  difference reproduced on every probe, including a 1000 Hz sine
+  with no low-frequency content — so it was not speech-specific
+  and not in the modulator path alone.
+- Decisive test: per-band display bins (envelope x10) after a
+  steady 1000 Hz sine. Track B stereo bins ran 2x–27x hot
+  off-frequency; Track B MONO bins matched Track A to 0.05% on
+  all 128 bands. Root cause: each `Band` held ONE `Biquad` per
+  filter role, shared across channels, while the reference
+  (JUCE `ProcessorDuplicator`) holds per-channel filter state.
+  The engine processes channel 0's block then channel 1's
+  identical block through the same filter state, so every filter
+  saw each block's samples twice and the response corrupted —
+  worst in the low bands, where the female F0 sits.
+- Fix (`Source/DSP/Vox8Filterbank.h`): every band filter is now a
+  per-channel array (`std::array<Biquad, kMaxChannels>`), indexed
+  by channel in `buildBandFilters`, `reset`, `analyseEnvelope`
+  and the carrier path. Still fixed-size member storage, still
+  allocation-free in `process()`, same per-sample work count
+  (CPU unchanged). No parameter, API or shell change — the shell
+  only holds a `FilterbankEngine` and calls its public API.
+- Regression test (`Tests/test_filterbank.cpp`,
+  `testStereoChannelIndependence`): stereo left output must equal
+  the mono run of the same content (< 1e-6), and silencing the
+  right channel must not change the left output. Verified both
+  ways: it FAILS exactly those 2 checks on the pre-fix engine
+  and passes on the fixed engine (suite 107,746 checks, 0
+  failures).
+- Note for the record: display bins read at end of file are
+  inflated in BOTH engines by low-band filter ring-down during
+  the renderer's zero-padded tail (band-0 envelope 0.0056 vs
+  0.0027 steady-state). That is common-mode — it does not affect
+  the A/B comparison — and the padded tail is ~8 ms of a 3 s
+  file, so it does not affect STOI either.
+
+The pre-fix 0.5678 number is superseded and must not be cited; the
+corrected 0.5818 above is the Track B result. The earlier commit
+(d48d391) carried the pre-fix number and a wrong hypothesis (float
+evaluation order); this correction replaces both.
 
 ## Reduced band counts (32/16 — the saturation question)
 
-Not run yet, and not a blocker. The engine does not support it
-straightforwardly: `kNumBands` is a compile-time constant baked
-into the band layout, gains and filter arrays, so a 32/16-band run
-needs a rebuild with a different constant (a scratch experiment,
-not a shipped change). Follow-up: build the renderer with
+Not run yet on Track B, and not a blocker. The engine does not
+support it straightforwardly: `kNumBands` is a compile-time
+constant baked into the band layout, gains and filter arrays, so a
+32/16-band run needs a rebuild with a different constant (a scratch
+experiment, not a shipped change). Track A is running its own
+32-band variant concurrently. Follow-up: build the renderer with
 `kNumBands` set to 32 and 16 in a scratch copy, render the same
-corpus, score the same way, and compare against 0.5678 @ 128.
+corpus, score the same way, and compare against 0.5818 @ 128.
 
 ## What is next
 
-- Localise the slt low-band divergence with the JUCE A/B probe
-  (in progress); update this doc with the finding.
 - Reduced-band runs (32/16) as a scratch experiment, same corpus
   and scoring.
+- Shell re-verification after the engine fix (pluginval / VST3
+  validator): not re-run on the VM yet. The change is private to
+  the engine (no API, parameter or shell change) and both DSP-only
+  consumers rebuild clean, but the Phase 2 shell verdict should
+  be re-confirmed before the next release cut.
 - Ghost STOI stays out until the Ghost resynthesis redesign lands
   (owed decision; the broken resynthesis would make the number
-  meaningless).
+  meaningless). Note: the Ghost engine holds no biquads, so the
+  stereo filter-state bug above does not apply to it.
