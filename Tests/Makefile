@@ -11,26 +11,47 @@ CXX ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -I../Source/DSP
 LDFLAGS ?=
 
-TEST_BIN := test_filterbank
-BENCH_BIN := bench_filterbank
+TEST_BIN := test_filterbank test_ghost
+BENCH_BIN := bench_filterbank bench_ghost
+RENDER_BIN := render_corpus render_corpus_ghost
 
-.PHONY: all test bench check clean
+.PHONY: all test bench check clean render
 
 all: test bench
 
-test: $(TEST_BIN)
-	./$(TEST_BIN)
+render: $(RENDER_BIN)
 
-$(TEST_BIN): test_filterbank.cpp ../Source/DSP/Vox8Filterbank.h \
+render_corpus: RenderCorpus.cpp ../Source/DSP/Vox8Filterbank.h \
 		../Source/DSP/Vox8Core.h ../Source/DSP/Vox8Params.h
-	$(CXX) $(CXXFLAGS) test_filterbank.cpp -o $(TEST_BIN) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) RenderCorpus.cpp -o $@ $(LDFLAGS)
+
+render_corpus_ghost: RenderCorpusGhost.cpp ../Source/DSP/Vox8Ghost.h \
+		../Source/DSP/Vox8Core.h ../Source/DSP/Vox8Params.h
+	$(CXX) $(CXXFLAGS) RenderCorpusGhost.cpp -o $@ $(LDFLAGS)
+
+test: $(TEST_BIN)
+	./test_filterbank
+	./test_ghost
+
+test_filterbank: test_filterbank.cpp ../Source/DSP/Vox8Filterbank.h \
+		../Source/DSP/Vox8Core.h ../Source/DSP/Vox8Params.h
+	$(CXX) $(CXXFLAGS) test_filterbank.cpp -o $@ $(LDFLAGS)
+
+test_ghost: test_ghost.cpp ../Source/DSP/Vox8Ghost.h \
+		../Source/DSP/Vox8Core.h ../Source/DSP/Vox8Params.h
+	$(CXX) $(CXXFLAGS) test_ghost.cpp -o $@ $(LDFLAGS)
 
 bench: $(BENCH_BIN)
-	./$(BENCH_BIN)
+	./bench_filterbank
+	./bench_ghost
 
-$(BENCH_BIN): bench_filterbank.cpp ../Source/DSP/Vox8Filterbank.h \
+bench_filterbank: bench_filterbank.cpp ../Source/DSP/Vox8Filterbank.h \
 		../Source/DSP/Vox8Core.h ../Source/DSP/Vox8Params.h
-	$(CXX) $(CXXFLAGS) bench_filterbank.cpp -o $(BENCH_BIN) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) bench_filterbank.cpp -o $@ $(LDFLAGS)
+
+bench_ghost: bench_ghost.cpp ../Source/DSP/Vox8Ghost.h \
+		../Source/DSP/Vox8Core.h ../Source/DSP/Vox8Params.h
+	$(CXX) $(CXXFLAGS) bench_ghost.cpp -o $@ $(LDFLAGS)
 
 # Framework-freedom: zero framework includes anywhere under Source/DSP.
 # No heap allocation in the DSP code headers: no new/malloc/vector/string.
@@ -47,4 +68,4 @@ check:
 	@echo "   0"
 
 clean:
-	rm -f $(TEST_BIN) $(BENCH_BIN)
+	rm -f $(TEST_BIN) $(BENCH_BIN) $(RENDER_BIN)

@@ -1,2 +1,8 @@
 test_filterbank
 bench_filterbank
+test_ghost
+bench_ghost
+render_corpus
+render_corpus_ghost
+Source/Plugin/build/
+Source/Plugin/build-asan/

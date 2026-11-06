@@ -4,8 +4,16 @@
 // - Vox8Core.h: band layout, RBJ biquads, shared helpers.
 // - Vox8Params.h: the parameter contract both engines share.
 // - Vox8Filterbank.h: Low Latency 128 filterbank engine (this step).
-// - Vox8Ghost.h: Spectral Ghost 1024 STFT/OLA backend (next step, not yet
-//   written).
+// - Vox8Ghost.h: Spectral Ghost 1024 STFT/OLA backend (Step 2).
+//   Goertzel analyseBins() with per-band stride, frozen[] envelope
+//   array, all four modes. Resynthesis is FFT cross-synthesis
+//   (redesign landed 2026-11-06, Decision 5): windowed carrier frame
+//   → 1024-pt FFT → per-bin gain from the envelope (log-interpolated,
+//   formant-shifted, morph-interpolated), carrier phase kept → IFFT
+//   → window → OLA. The 0.72 carrier floor is gone (silence in →
+//   silence out); Mask is per-bin ducking with multiplier 16.0
+//   (redesign calibration). All 107,646 Ghost checks pass — see the
+//   header and docs/ARCHITECTURE.md for the measured numbers.
 //
 // The no-framework rule: nothing under Source/DSP/ may include a framework
 // header (JUCE, iPlug2, VST3 SDK, AU headers) or a host type. The core
