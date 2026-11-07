@@ -20,14 +20,17 @@ host buffers only.
 
 ## What is NOT wired in
 
-- **Spectral Ghost 1024 engine — PARKED.** The reference Ghost
-  resynthesis does not vocode (Step 2 measured: output on/off 1.32× on
-  bursts the envelope array tracks at 41.5×). The shell has a second
+- **Spectral Ghost 1024 engine — NOT WIRED IN YET.** The Ghost
+  resynthesis now works: the FFT cross-synthesis redesign (commit
+  `4cfd3a3`, 2026-11-06) fixed all 9 resynthesis failures, the full suite
+  is green (filterbank 107,746 checks + Ghost 107,646 checks, 0 failures),
+  and Ghost STOI 0.7796 beats TAL-Vocoder 0.7434. The old "PARKED:
+  resynthesis does not vocode" reason is false since that commit — the
+  engine simply is not wired into this shell yet. The shell has a second
   engine slot ready (`Vox8.h` / `Vox8.cpp`, search "Ghost engine slot")
   and the `engineMode` parameter already exists with only the filterbank
-  value exposed. No restructuring is needed when the redesign decision
-  lands (FFT cross-synthesis vs per-band carrier filtering vs park Ghost
-  as analysis-only).
+  value exposed. Wiring is the pending step; no restructuring is needed
+  when it lands.
 - **Spectrum / mask display** — a later step, not this one.
 
 ## Build

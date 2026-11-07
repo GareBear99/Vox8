@@ -8,7 +8,7 @@ spectral envelope onto the carrier.
 This is Track B of the Vox8 build (Gary, 2026-11-05: "both for vox 8"):
 Track A finishes the FreeVox8 JUCE repo to a certified v1.0; this track
 rebuilds the same product fresh in iPlug2. The FreeVox8 repo
-(`GareBear99/FreeVox8`, HEAD `02eedfe`) is the reference for the DSP design
+(`GareBear99/FreeVox8`, HEAD `a2948c8`) is the reference for the DSP design
 — read it, rebuild it in iPlug2, do not copy the JUCE code. A read-only
 reference clone lives at `~/workspace/FreeVox8-ref/`; Track A's working
 clone is `~/workspace/FreeVox8/` — do not touch it.

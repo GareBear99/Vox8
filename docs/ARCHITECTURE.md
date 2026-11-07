@@ -1,7 +1,7 @@
 # Vox8 Track B — Architecture Notes
 
 Track B rebuilds Vox8 fresh in iPlug2. The reference is FreeVox8
-(`GareBear99/FreeVox8`, HEAD `02eedfe`, 4 commits, GPL-3.0), read from the
+(`GareBear99/FreeVox8`, HEAD `a2948c8`, 15 commits, GPL-3.0), read from the
 read-only clone at `~/workspace/FreeVox8-ref/`. The specification is the
 Vox8 paper (`~/workspace/vox8-paper.md`, Draft v0.1) plus the three study
 reports (`~/workspace/vox8-*-research.md`). The iPlug2 approach follows

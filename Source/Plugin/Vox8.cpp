@@ -93,7 +93,7 @@ Vox8::Vox8(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(knobRect(6, row2Y), kMorph));
 
     const IRECT footer = bounds.GetFromBottom(52.f).GetPadded(-10.f);
-    pGraphics->AttachControl(new ITextControl(footer.GetFromTop(20.f), "Engine: Low Latency 128 — Spectral Ghost 1024 parked pending redesign decision", IText(13)));
+    pGraphics->AttachControl(new ITextControl(footer.GetFromTop(20.f), "Engine: Low Latency 128 — Spectral Ghost 1024 not wired into the shell yet", IText(13)));
     pGraphics->AttachControl(new ITextControl(footer.GetFromBottom(20.f), "Freeze holds the envelope above 0.5. Transient Protect is a manual macro, not a detector.", IText(13)));
   };
 #endif
@@ -200,10 +200,12 @@ void Vox8::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
       outputs[c][s] = inputs[c][s];
   }
 
-  // Ghost engine slot: when the redesign lands, dispatch here on
-  // mEngineParams.engineMode (0 = filterbank, 1 = Ghost) and report the
-  // Ghost frame latency with SetLatency(). Until then every mode runs
-  // the filterbank, which has zero latency (PLUG_LATENCY 0).
+  // Ghost engine slot: when Ghost is wired into the shell, dispatch here
+  // on mEngineParams.engineMode (0 = filterbank, 1 = Ghost) and report the
+  // Ghost frame latency with SetLatency(). The redesign has landed (FFT
+  // cross-synthesis, commit 4cfd3a3); wiring is the pending step. Until
+  // then every mode runs the filterbank, which has zero latency
+  // (PLUG_LATENCY 0).
   float* ioPtrs[vox8::kMaxChannels] = {nullptr, nullptr};
   for (int c = 0; c < nChans; ++c)
     ioPtrs[c] = outputs[c];

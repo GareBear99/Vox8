@@ -8,15 +8,16 @@
 //
 // Engines:
 //   Slot 0 — Low Latency 128 filterbank (Vox8Filterbank.h). Wired in.
-//   Slot 1 — Spectral Ghost 1024 (Vox8Ghost.h). PARKED: the reference
-//   Ghost resynthesis does not vocode (measured Step 2: output on/off
-//   ratio 1.32 on bursts the envelope array tracks at 41.5x). The Ghost
-//   engine is NOT wired into this shell until the redesign decision lands
-//   (FFT cross-synthesis vs per-band carrier filtering vs park Ghost as
-//   analysis-only). When it lands, add a GhostEngine member here and a
-//   case in ProcessBlock; no restructuring is needed. The engineMode
-//   parameter exists in the contract already, with only the filterbank
-//   value exposed until then.
+//   Slot 1 — Spectral Ghost 1024 (Vox8Ghost.h). NOT WIRED IN YET: the
+//   Ghost resynthesis now works — the FFT cross-synthesis redesign
+//   (commit 4cfd3a3, 2026-11-06) fixed all 9 resynthesis failures, suite
+//   green, Ghost STOI 0.7796 beats TAL 0.7434 — but the engine is NOT
+//   wired into this shell yet. When it is wired in, add a GhostEngine
+//   member here and a case in ProcessBlock; no restructuring is needed.
+//   The engineMode parameter exists in the contract already, with only
+//   the filterbank value exposed until then. (The old "PARKED: resynthesis
+//   does not vocode" reason is false since 4cfd3a3; only the fact that
+//   Ghost is not wired in is still true.)
 //
 // Parameter indices are FROZEN before the first release: iPlug2 state is
 // a positional binary chunk, so reordering an index breaks every saved
@@ -98,9 +99,10 @@ private:
   void SyncParams() noexcept;
 
   vox8::FilterbankEngine mFilterbank;
-  // Ghost engine slot: add `vox8::GhostEngine mGhost;` here when the
-  // redesign decision lands. Same parameter contract, same ProcessBlock
-  // dispatch (see Vox8.cpp).
+  // Ghost engine slot: add `vox8::GhostEngine mGhost;` here when Ghost
+  // is wired into the shell. The redesign has landed (FFT cross-synthesis,
+  // commit 4cfd3a3); wiring is the pending step. Same parameter contract,
+  // same ProcessBlock dispatch (see Vox8.cpp).
   vox8::Parameters mEngineParams;
   int mMidiNote = 48; // C3, the engine default; latest NoteOn wins.
 #endif
