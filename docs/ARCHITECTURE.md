@@ -1,12 +1,22 @@
 # Vox8 Track B — Architecture Notes
 
 Track B rebuilds Vox8 fresh in iPlug2. The reference is FreeVox8
-(`GareBear99/FreeVox8`, HEAD `a2948c8`, 15 commits, GPL-3.0), read from the
+(`GareBear99/FreeVox8`, HEAD `7f74987`, 16 commits, GPL-3.0), read from the
 read-only clone at `~/workspace/FreeVox8-ref/`. The specification is the
 Vox8 paper (`~/workspace/vox8-paper.md`, Draft v0.1) plus the three study
 reports (`~/workspace/vox8-*-research.md`). The iPlug2 approach follows
 `~/workspace/therum-iplug2-plan.md` (framework-free DSP core first, prove
 it in iPlug2, parameters + state, UI last).
+
+**Status (2026-11-07, HEAD `f5e8f3c`):** Step 1 (filterbank) DONE,
+Step 2 (Ghost) DONE in the DSP core, Phase 2 (iPlug2 shell) DONE —
+pluginval 10 SUCCESS + VST3 validator 47/0. **The Ghost engine is NOT
+wired into the shell** (filterbank-only, 15 params). Ghost STOI 0.7796
+beats TAL 0.7434. Ghost CPU is the single biggest engineering gap
+(41.0% @ 44.1 kHz median block 512 — ~16× FreeVox8's Ghost). Deep Vox
+work (Ghost wiring, FFT replacement, Mac build, Rank 10) comes LATER
+per Gary — this repo is left alone for now except for keeping the
+papers and READMEs up to date.
 
 ## What Vox8 is
 
@@ -18,7 +28,7 @@ sidechain) → modulator's spectral envelope imposed on the carrier.
 
 `Source/DSP/Vox8Core.h` (band layout, RBJ biquads, helpers),
 `Vox8Params.h` (shared parameter contract), `Vox8Filterbank.h` (Low
-Latency 128 engine). Tests: `Tests/test_filterbank.cpp`, 107,743 checks,
+Latency 128 engine). Tests: `Tests/test_filterbank.cpp`, 107,746 checks,
 0 failures; `make check` clean (0 framework includes, 0 heap allocation
 in the core headers). The core is plain C++17, `float` sample type (kept
 from the reference; iPlug2 defaults to `double` — the shell will decide
@@ -98,12 +108,28 @@ when it is made).
   on a quiet machine is what decides dropout-free performance. Optimisation
   (SIMD, cheaper filters, band reduction) stays on the list.
 
-## Step 2 (DONE 2026-11-05, measured — NOT shippable as a vocoder): Spectral Ghost 1024 engine
+## Step 2 (DONE 2026-11-06, FFT cross-synthesis redesign — resynthesis WORKS, full suite green): Spectral Ghost 1024 engine
 
 `Source/DSP/Vox8Ghost.h` (Ghost engine), `Tests/test_ghost.cpp`
-(107,649 checks, **9 failures** — the failures are the finding, see
-below), `Tests/bench_ghost.cpp`. Same framework-free discipline as
-Step 1; `make check` clean (0 framework includes, 0 heap allocation).
+(107,646 checks, **0 failures** — the 9 resynthesis failures below
+are RESOLVED, see "THE RESYNTHESIS FINDING"), `Tests/bench_ghost.cpp`.
+Same framework-free discipline as Step 1; `make check` clean (0
+framework includes, 0 heap allocation).
+
+**Current state (2026-11-07):** the Ghost engine's ANALYSIS is still
+Goertzel (`analyseBins()`, per-band stride) and its RESYNTHESIS is
+FFT cross-synthesis (redesign landed 2026-11-06, Decision 5) — Vox8
+kept Goertzel analysis AND added FFT resynthesis. That is the CPU
+problem: Ghost median block 512 is 41.0% @ 44.1 kHz, 43.7% @ 48 kHz,
+72.6% @ 96 kHz — ~16× FreeVox8's Ghost (~2.5%) for −0.0143 STOI.
+FreeVox8 proved the fix (replace Goertzel analysis with modulator
+FFT: Ghost falls to ~2.5% with HIGHER STOI, 0.7939). **Do NOT wire
+the current Ghost into the shell as-is** — wire it AND replace the
+Goertzel analysis with modulator FFT in the same step. That work
+comes LATER per Gary. Ghost output level is very quiet (render peaks
+0.004–0.018) — gain staging is a product gap. Ghost latency must be
+declared via `SetLatency(1024)` + PDC when wired (structural 1024
+samples, 23.22 ms @ 44.1 kHz).
 
 ### What was built
 
@@ -206,7 +232,13 @@ Wall-clock means/medians on this VM are polluted by scheduling stalls
 number is the MINIMUM block time (a stall can only slow a block, never
 speed it), blocks 512–2048: **~39% @ 44.1 kHz, ~41% @ 48 kHz, ~65%
 @ 96 kHz** of the real-time budget. Cross-check vs Track A Ghost:
-~39% / ~41% / ~65% — a match. Pre-fix (flat stride 4) clean means
+~39% / ~41% / ~65% — a match. **Median block 512 (2026-11-06,
+the number that frames the gap): 41.0% @ 44.1 kHz, 43.7% @ 48 kHz,
+72.6% @ 96 kHz — ~16× FreeVox8's Ghost (~2.5%) for −0.0143 STOI.**
+The cause is structural: Vox8 kept Goertzel analysis (15.435M /
+16.226M / 25.731M transcendental calls/s/channel) AND added FFT
+resynthesis, while FreeVox8 replaced Goertzel with modulator FFT.
+Pre-fix (flat stride 4) clean means
 were ~29–31% / ~31–33% / ~62%; the stride fix costs +36% / +32% /
 +5% in iterations, and the measured minimums confirm +36% / +32% /
 +6%. The counted Goertzel rates above are the load-independent
@@ -215,16 +247,19 @@ and the p95 on a quiet machine is what decides dropout-free
 performance. Note Track A's filterbank warning carries over: ~95% @
 96 kHz on the filterbank leaves no headroom there.
 
-### Carrier floor — kept, labelled, decision owed by Gary
+### Carrier floor — REMOVED in the redesign (2026-11-06)
 
-The Vocoder formula's 0.72 base term passes carrier at zero envelope:
-silence in (modulator silent) gives max|out| ≈ 0.03–0.08 (Track A
-measured 0.083, −21.6 dBFS on their engine). It fails the golden
-"silence in → silence out" test as shipped. Options: remove the floor
-(+ level recalibration), gate it on envelope, or keep it labelled as
-a known gap. Gary has not decided; this engine KEEPS it (faithful to
-the reference formula) and labels it here and in the header. It
-blocks nothing in this step.
+The Vocoder formula's 0.72 base term passed carrier at zero envelope:
+silence in (modulator silent) gave max|out| ≈ 0.03–0.08 (Track A
+measured 0.083, −21.6 dBFS on their engine). It failed the golden
+"silence in → silence out" test as shipped. **The 0.72 floor is gone
+— removed in the FFT cross-synthesis redesign (Decision 2 folded in,
+2026-11-06).** Silence in → silence out is now a passing acceptance
+test (strict bound: modes 0/2/3 peak < 1e-6 on silence). The text
+below is kept as the record of what the floor was and why it was
+removed: the options were to remove the floor (+ level
+recalibration), gate it on envelope, or keep it labelled as a known
+gap. The redesign removed it.
 
 ### THE RESYNTHESIS FINDING — the engine does not vocode (9 failing checks)
 
@@ -300,10 +335,12 @@ a green run.
    Track A reconciles to one canonical set.
 2. **Formant-shift bin scale.** Filterbank: 8 bins/octave. Ghost: 10
    bins/octave. This engine keeps 8 until Track A reconciles.
-3. **STOI corpus + test signals.** Track A is establishing the fixed
-   corpus (10 Harvard/IEEE sentences, male + female) and test signals.
-   This track runs the SAME tests when they land; no corpus is invented
-   here and no STOI number is claimed yet.
+3. **STOI corpus + test signals — LANDED, measured.** Track A's fixed
+   corpus is the 20-file CMU ARCTIC set (bdl male + slt female, fixed
+   C4 carrier). This track ran the SAME tests: Ghost STOI **0.7796**
+   overall (bdl 0.7941, slt 0.7651) vs TAL-Vocoder 0.7434 (+0.036)
+   and filterbank 0.5817 (+0.198). Filterbank STOI agrees with Track
+   A to the fourth decimal (0.5818 vs 0.5817, `docs/STOI-trackb.md`).
 4. **Ghost resynthesis redesign — DONE 2026-11-06 (Decision 5).**
    FFT cross-synthesis landed in `Source/DSP/Vox8Ghost.h`: windowed
    carrier frame → 1024-pt radix-2 FFT → per-bin gain from the
@@ -322,11 +359,15 @@ a green run.
    (Decision 2 folded in).** Silence in → silence out is now a
    passing acceptance test (strict bound: modes 0/2/3 peak < 1e-6
    on silence).
-6. **WASPAA β/λ correction.** Baseline smear measured (4.83 dB @
-   F0=220, 6.20 dB @ F0=250). The correction is built ONLY if it
-   improves R by ≥ 3 dB without degrading the stationary control by
-   > 0.5 dB. Track A is implementing the correction half of the pilot
-   in the pilot harness, not in the engine yet.
+6. **WASPAA β/λ correction — PILOT FAILED, stays out (2026-11-06).**
+   Baseline smear measured (4.83 dB @ F0=220, 6.20 dB @ F0=250).
+   The correction was built ONLY if it improved R by ≥ 3 dB without
+   degrading the stationary control by > 0.5 dB. Track A ran the
+   pilot in the pilot harness on 2026-11-06 and it FAILED: best
+   +0.47 dB on the frozen snapshot (ARC Audio Bench cross-check
+   0.03 dB). The correction stays out and is NOT future work — the
+   freeze-blur fix path is the sinusoidal-model freeze
+   (ProVox8-scale research).
 
 ## iPlug2 pin
 
@@ -346,10 +387,11 @@ and widening to double at the boundary and back would buy nothing.
 
 ## NOT being built in this track
 
-- 256-band tier or intraframe (WASPAA 2001 β/λ) correction — ProVox8 or
-  free is undecided by Gary; the freeze pilot is Track A's step 2 and
-  decides whether the correction has audible value. Do not implement it
-  here unless the pilot says so.
+- 256-band tier or intraframe (WASPAA 2001 β/λ) correction — the
+  freeze pilot ran 2026-11-06 and FAILED its ≥ 3 dB rule (best
+  +0.47 dB), so the correction stays out and is NOT future work. Do
+  not implement it here. The freeze-blur fix path is the
+  sinusoidal-model freeze (ProVox8-scale research).
 - Singing synth — Vox8 processes audio; a singing synth would be a
   separate product, undecided.
 - Full phase-vocoder backend (paper §6 rank 9) — DONE 2026-11-06 as
@@ -360,10 +402,14 @@ and widening to double at the boundary and back would buy nothing.
 
 1. **Ghost resynthesis redesign — DONE 2026-11-06 (Decision 5:
    FFT cross-synthesis).** All 9 failing checks pass; full suite
-   green. What remains is the Ghost STOI render on Track A's corpus
-   (the number that says whether the redesign closes the gap to the
-   TAL bar 0.7434), and wiring the Ghost engine into the Phase 2
-   iPlug2 shell (it currently ships the filterbank only).
+   green. Ghost STOI is measured: **0.7796** overall (bdl 0.7941,
+   slt 0.7651) vs TAL-Vocoder 0.7434 (+0.036) — the redesign closes
+   the gap to the TAL bar. What remains is wiring the Ghost engine
+   into the Phase 2 iPlug2 shell (it currently ships the filterbank
+   only) AND replacing the Ghost's Goertzel analysis with modulator
+   FFT in the same step — do not wire it as-is (Ghost CPU 41.0% @
+   44.1 kHz median block 512, ~16× FreeVox8's Ghost). That work
+   comes LATER per Gary.
 2. Phase 2: iPlug2 shell — DONE 2026-11-05 (see below). The filterbank
    engine is proven and now loadable as a VST3; the Ghost engine rides
    along once its resynthesis is decided.
@@ -414,14 +460,13 @@ restructuring.
   failures (scan, open cold/warm, plugin info, state, automation,
   parameter thread safety, buses, fuzz parameters). Latency reported 0.
 - **Steinberg VST3 validator: 47 tests passed, 0 failed.**
-- Standalone filterbank suite re-run after the shell work: 107,743
+- Standalone filterbank suite re-run after the shell work: 107,746
   checks, 0 failures (unchanged).
-- **STOI: NOT run.** The Bench STOI command is ready
-  (`ARC-AudioBench` at `a4fdd5a`, `arc_audiobench.py stoi clean
-  degraded`), but Track A's fixed corpus (10 Harvard/IEEE sentences,
-  male + female) has not landed — no corpus is invented here and no
-  STOI number is claimed. Freeze-blur likewise waits for the Ghost
-  redesign (Ghost-specific).
+- **STOI: measured 2026-11-06.** Ghost **0.7796** overall (bdl
+  0.7941, slt 0.7651) vs TAL-Vocoder 0.7434 (+0.036) and filterbank
+  0.5817 (+0.198), on Track A's fixed 20-file CMU ARCTIC corpus
+  (fixed C4 carrier). Filterbank STOI agrees with Track A to the
+  fourth decimal (0.5818 vs 0.5817, `docs/STOI-trackb.md`).
 
 ### What the VM can and cannot build (iPlug2 Linux gaps, all verified)
 

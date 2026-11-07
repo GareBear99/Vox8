@@ -8,10 +8,25 @@ spectral envelope onto the carrier.
 This is Track B of the Vox8 build (Gary, 2026-11-05: "both for vox 8"):
 Track A finishes the FreeVox8 JUCE repo to a certified v1.0; this track
 rebuilds the same product fresh in iPlug2. The FreeVox8 repo
-(`GareBear99/FreeVox8`, HEAD `a2948c8`) is the reference for the DSP design
+(`GareBear99/FreeVox8`, HEAD `7f74987`) is the reference for the DSP design
 — read it, rebuild it in iPlug2, do not copy the JUCE code. A read-only
 reference clone lives at `~/workspace/FreeVox8-ref/`; Track A's working
 clone is `~/workspace/FreeVox8/` — do not touch it.
+
+**Status (2026-11-07, HEAD `f5e8f3c`):** Step 1 (filterbank engine)
+DONE, Step 2 (Ghost engine) DONE in the DSP core, Phase 2 (iPlug2
+shell) DONE — pluginval strictness 10 SUCCESS + Steinberg VST3
+validator 47/0 (2026-11-05, Linux headless VST3 only). **The Ghost
+engine is NOT wired into the shell** — the shell is filterbank-only
+(15 params, `engineMode` exposes only "Low Latency 128"). Ghost STOI
+0.7796 beats TAL-Vocoder 0.7434. Ghost CPU is the single biggest
+engineering gap (median block 512: 41.0% @ 44.1 kHz — ~16× FreeVox8's
+Ghost, because Vox8 kept Goertzel analysis AND added FFT
+resynthesis); the fix is to wire Ghost into the shell AND replace its
+Goertzel analysis with modulator FFT in the same step — do not wire
+it as-is. Deep Vox work (Ghost wiring, FFT replacement, Mac build,
+Rank 10) comes LATER per Gary — this repo is left alone for now
+except for keeping the papers and READMEs up to date.
 
 ## Design
 
@@ -49,7 +64,7 @@ Dual-engine, as specified in `~/workspace/vox8-paper.md`:
 - `Source/DSP/Vox8Core.h` — band layout, RBJ biquads, shared helpers.
 - `Source/DSP/Vox8Params.h` — the shared parameter contract.
 - `Source/DSP/Vox8Filterbank.h` — Low Latency 128 engine, all four modes.
-- `Tests/test_filterbank.cpp` — **107,743 checks, 0 failures.**
+- `Tests/test_filterbank.cpp` — **107,746 checks, 0 failures.**
   Band layout, biquads, silence/finiteness at extremes, envelope transfer,
   freeze hold, formant shift (spectral centroid moves ±12 semitones:
   821 / 998 / 1247 Hz), real two-envelope morph (midpoint is a hybrid,
@@ -58,10 +73,20 @@ Dual-engine, as specified in `~/workspace/vox8-paper.md`:
 - `make check` — 0 framework includes, 0 heap allocation in the core.
 - `Tests/bench_filterbank.cpp` — CPU micro-benchmark (see below).
 
-**Next:** Step 2 — Spectral Ghost 1024 engine (Goertzel analysis,
-frozen envelope array, OLA resynthesis, ~23 ms frame delay), same test
-discipline. Then the iPlug2 shell (Phase 2): prove the core in iPlug2's
-`IPlugInstrument` pattern, VST3 + AU + Standalone, pluginval 10.
+**Step 2 — DONE (2026-11-06): Spectral Ghost 1024 engine, FFT
+cross-synthesis redesign (Decision 5).** All 9 resynthesis failures
+fixed — the full suite is green (filterbank 107,746 checks + Ghost
+107,646 checks = 215,392 checks, 0 failures). Ghost STOI 0.7796 beats
+TAL-Vocoder 0.7434 (see Measurements below). The Ghost engine lives in
+the DSP core (`Source/DSP/Vox8Ghost.h`) but is **NOT wired into the
+iPlug2 shell** — the shell ships the filterbank only; wiring is the
+pending step, and it comes LATER per Gary.
+
+**Phase 2 — DONE (2026-11-05): iPlug2 shell around the filterbank
+engine.** VST3 (Linux headless, `NO_IGRAPHICS`), pluginval v1.0.4
+strictness 10 **SUCCESS** (25 sections, 0 failures) + Steinberg VST3
+validator **47 passed, 0 failed**. Editor-open, AU build, and pluginval
+on the Mac wait for the Mac build (do not claim them from the VM).
 
 ## CPU (this VM, not the reference hardware)
 
@@ -85,17 +110,37 @@ p95 on a quiet machine is the number that decides dropout-free
 performance; this VM cannot produce a clean p95. No CPU claim is made
 beyond these measured numbers.
 
-## Measurements (targets, from the paper)
+## Measurements (measured, 2026-11-05/06 — not targets)
 
-STOI on the fixed corpus at least equal to TAL-Vocoder (free) and Ableton
-Vocoder (stock), with no worse consonant-band loss; Low Latency 128 engine
-latency within a small multiple of Morphoder's 639 samples; Ghost engine
-~23 ms frame delay stated, not hidden; frozen vibrato vowel holds without
-audible wobble; morph midpoint sounds like a hybrid, not a crossfade; Mask
-pocket without broadband pumping; pluginval strictness 10. Track A is
-establishing the corpus and test signals; this track runs the SAME tests
-so the two tracks' results are directly comparable. Until Track A's corpus
-lands, no STOI number is claimed here.
+- **STOI (fixed 20-file CMU ARCTIC corpus, fixed C4 carrier):**
+  Ghost **0.7796** overall (bdl 0.7941, slt 0.7651) vs TAL-Vocoder
+  0.7434 (+0.036) and filterbank 0.5817 (+0.198). The Ghost beats TAL;
+  the filterbank loses to TAL by 0.16 even tuned.
+- **Ghost latency:** first change 690 samples (14.38 ms @ 48 kHz),
+  structural 1024 samples (23.22 ms @ 44.1 kHz). Must be declared via
+  `SetLatency(1024)` + PDC when Ghost is wired into the shell.
+- **Ghost CPU — the single biggest engineering gap (median block 512,
+  this VM): 41.0% @ 44.1 kHz, 43.7% @ 48 kHz, 72.6% @ 96 kHz** —
+  ~16× FreeVox8's Ghost (~2.5%) for −0.0143 STOI, because Vox8 kept
+  Goertzel analysis AND added FFT resynthesis. FreeVox8 proved the
+  fix: replace Goertzel analysis with modulator FFT (Ghost falls to
+  ~2.5% with HIGHER STOI, 0.7939). Do NOT wire the current Ghost
+  into the shell as-is — wire it AND replace the Goertzel analysis
+  with modulator FFT in the same step.
+- **Ghost output level is very quiet** (render peaks 0.004–0.018 vs
+  TAL 0.66–1.04) — gain staging is a product gap.
+- **Mask usable range is EMPTY** at the 1 dB pumping bar, in both
+  engines (see the paper §7 / FreeVox8 PAPER.md §3.5, §4.4).
+- **Freeze blur:** ~5 dB peak-concentration loss on frozen vibrato
+  (4.83 dB @ F0=220, 6.20 dB @ F0=250). The WASPAA β/λ correction was
+  piloted by Track A and FAILED its ≥ 3 dB rule (best +0.47 dB) — it
+  stays out; the fix path is the sinusoidal-model freeze
+  (ProVox8-scale research).
+
+Track A (FreeVox8) is the reference for the corpus and test signals;
+this track runs the SAME tests so the two tracks' results are directly
+comparable. The filterbank STOI agrees to the fourth decimal between
+the two tracks (0.5818 vs 0.5817, see `docs/STOI-trackb.md`).
 
 ## Decisions and open questions
 

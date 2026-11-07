@@ -30,7 +30,17 @@ host buffers only.
   engine slot ready (`Vox8.h` / `Vox8.cpp`, search "Ghost engine slot")
   and the `engineMode` parameter already exists with only the filterbank
   value exposed. Wiring is the pending step; no restructuring is needed
-  when it lands.
+  when it lands. **Do NOT wire it as-is:** Ghost CPU is the single
+  biggest engineering gap (median block 512: 41.0% @ 44.1 kHz, 43.7% @
+  48 kHz, 72.6% @ 96 kHz — ~16× FreeVox8's Ghost, because Vox8 kept
+  Goertzel analysis AND added FFT resynthesis). Wire Ghost into the
+  shell AND replace its Goertzel analysis with modulator FFT in the
+  same step. Ghost latency must be declared via `SetLatency(1024)` +
+  PDC when wired (structural 1024 samples, 23.22 ms @ 44.1 kHz).
+  Ghost output level is very quiet (render peaks 0.004–0.018) — gain
+  staging is a product gap. That work comes LATER per Gary (deep Vox
+  work — this repo is left alone for now except for keeping the papers
+  and READMEs up to date).
 - **Spectrum / mask display** — a later step, not this one.
 
 ## Build
